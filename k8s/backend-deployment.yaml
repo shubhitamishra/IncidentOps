@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentops-backend
+  labels:
+    app: incidentops-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: incidentops-backend
+  template:
+    metadata:
+      labels:
+        app: incidentops-backend
+    spec:
+      containers:
+        - name: backend
+          image: incidentops-backend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: incidentops-config
+            - secretRef:
+                name: incidentops-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentops-backend
+spec:
+  selector:
+    app: incidentops-backend
+  ports:
+    - port: 5000
+      targetPort: 5000
+  type: ClusterIP

@@ -1,0 +1,109 @@
+name: CI — Build & Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── Job 1: Syntax-check every backend JS file ──────────────────────────────
+  lint-backend:
+    name: Lint Backend (node --check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Check JS syntax (node --check)
+        # node --check parses the file for syntax errors without running it.
+        # This catches typos, missing brackets, and bad require() paths statically.
+        run: |
+          echo "Checking backend JS files..."
+          find backend/src -name "*.js" | while read f; do
+            node --check "$f" && echo "  ✓ $f" || { echo "  ✗ $f — syntax error"; exit 1; }
+          done
+          echo "All backend files pass syntax check."
+
+  # ─── Job 2: Build Docker images ─────────────────────────────────────────────
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: docker build -t incidentops-backend:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t incidentops-frontend:ci ./frontend
+
+  # ─── Job 3: Smoke test (docker compose up → health check → down) ────────────
+  smoke-test:
+    name: Smoke Test (docker compose)
+    runs-on: ubuntu-latest
+    # Only run after both other jobs pass
+    needs: [lint-backend, build-images]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start full stack (detached)
+        # env_file in docker-compose.yml is optional, so no .env needed in CI
+        run: docker compose up --build -d
+
+      - name: Wait for backend to be healthy
+        # Poll /health up to 60s — backend needs time to connect to Mongo
+        run: |
+          echo "Waiting for backend..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5000/health > /dev/null 2>&1; then
+              echo "Backend healthy after ${i}s"
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://localhost:5000/health || { echo "Backend never became healthy"; docker compose logs; exit 1; }
+
+      - name: Verify API endpoints
+        run: |
+          echo "--- GET /health ---"
+          curl -sf http://localhost:5000/health | python3 -m json.tool
+
+          echo "--- GET /api/services ---"
+          curl -sf http://localhost:5000/api/services | python3 -m json.tool
+
+          echo "--- GET /api/incidents ---"
+          curl -sf http://localhost:5000/api/incidents | python3 -m json.tool
+
+          echo "--- GET /api/oncall ---"
+          curl -sf http://localhost:5000/api/oncall | python3 -m json.tool
+
+          echo "--- GET /api/oncall/current ---"
+          # Returns null when DB is empty — that's expected in CI (no seed)
+          curl -sf http://localhost:5000/api/oncall/current
+
+          echo ""
+          echo "All endpoints responded successfully."
+
+      - name: Verify frontend serves HTML
+        run: |
+          STATUS=$(curl -so /dev/null -w "%{http_code}" http://localhost:8080)
+          echo "Frontend HTTP status: $STATUS"
+          [ "$STATUS" = "200" ] || { echo "Frontend not reachable"; exit 1; }
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

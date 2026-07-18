@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: incidentops-frontend
+  labels:
+    app: incidentops-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: incidentops-frontend
+  template:
+    metadata:
+      labels:
+        app: incidentops-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: incidentops-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "150m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: incidentops-frontend
+spec:
+  selector:
+    app: incidentops-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+  type: NodePort

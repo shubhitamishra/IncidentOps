@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: incidentops-config
+data:
+  PORT: "5000"
+  ESCALATION_TIMEOUT_MINUTES: "5"
+---
+# NOTE: Do not commit real secret values to GitHub. In this demo, populate
+# these with `kubectl create secret generic` at deploy time, or via a
+# sealed-secrets/external-secrets setup in a real production cluster.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: incidentops-secrets
+type: Opaque
+stringData:
+  MONGO_URI: "mongodb://mongo:27017/incidentops"
+  SMTP_USER: ""
+  SMTP_PASS: ""

@@ -1,0 +1,46 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: incidentops-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    # Healthcheck ensures the backend doesn't try to connect before Mongo is ready.
+    # mongosh ping is the canonical readiness check for mongo:7.
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    build: ./backend
+    container_name: incidentops-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/incidentops
+      - PORT=5000
+      - ESCALATION_TIMEOUT_MINUTES=5
+    # Load optional AWS/IBM keys from backend/.env without committing them.
+    # The file is safe to be absent — docker compose ignores a missing env_file
+    # gracefully when required: false is set.
+    env_file:
+      - path: ./backend/.env
+        required: false
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    container_name: incidentops-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+volumes:
+  mongo-data:
