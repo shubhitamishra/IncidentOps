@@ -1,0 +1,16 @@
+{
+  "name": "aws",
+  "version": "1.0.0",
+  "description": "This folder contains the AWS Lambda function used for multi-channel alert delivery (email + SMS via a single SNS topic).",
+  "main": "snsAlertLambda.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@aws-sdk/client-sns": "^3.1090.0"
+  }
+}
