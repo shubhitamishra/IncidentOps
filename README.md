@@ -198,18 +198,6 @@ The backend automatically creates the `incident_audit_log` database and mirrors
 every timeline event (created / acknowledged / resolved) to it. If credentials
 are not set, the integration no-ops safely — the app works fine in demo mode.
 
-## Live demo script (for your presentation)
-
-See [`docs/presentation-notes.md`](docs/presentation-notes.md) for the full rehearsal-ready script.
-
-Quick sequence:
-1. Show the working dashboard at http://localhost:8080
-2. Point to "Broken Service" — watch the incident auto-create (~90s)
-3. Acknowledge the incident; show timeline updates
-4. Run the K8s self-healing demo (`kubectl delete pod`)
-5. Show `kubectl get hpa`; explain autoscaling
-6. Close with the audit trail timeline
-
 
 ## Future scope (mention in presentation to show industry thinking)
 
