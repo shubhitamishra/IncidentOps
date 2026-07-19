@@ -6,207 +6,221 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-HPA%20%2B%20self--healing-326CE5?logo=kubernetes&logoColor=white)](k8s/)
 [![Node](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](backend/package.json)
 
-A mini incident management and on-call alerting system — the kind of tool
-that sits behind every production engineering team (a scoped-down
-PagerDuty). Built to demonstrate cloud-native deployment practices:
-containerization, orchestration, self-healing, autoscaling, and
-multi-cloud service integration (AWS + IBM Cloud).
+A cloud-native Incident Management and On-Call Alerting Platform designed for high-availability production environments. IncidentOps automates service health monitoring, multi-channel alerting (AWS SNS), automated incident escalation, and immutable audit logging (IBM Cloudant), while demonstrating enterprise-grade Kubernetes orchestration (self-healing, HPA, and liveness probes).
 
-## The problem
+---
 
-When a service goes down, someone needs to know immediately, someone
-needs to be accountable for responding, and there needs to be a record of
-what happened and when. Most student projects skip this — IncidentOps
-*is* this.
+## 📌 Overview & Problem Statement
 
-## How it works
+When production services fail, engineering teams need immediate notification, clear accountability via on-call rotations, and a complete historical record for postmortems. 
 
-1. A background poller checks each monitored service's health endpoint
-   on a schedule.
-2. If a service fails enough consecutive checks, an incident is
-   auto-created and the current on-call engineer is alerted.
-3. If the incident isn't acknowledged within a timeout, it escalates to
-   the next person in the on-call rotation.
-4. Every state change (created → acknowledged → resolved) is logged to a
-   timeline, giving a full postmortem record.
+**IncidentOps** provides an end-to-end operational platform that:
+- Continuously polls monitored service endpoints.
+- Triggers automated incidents upon health check failures.
+- Dispatches multi-channel alerts to on-call engineers.
+- Escalates unacknowledged incidents deterministically.
+- Maintains an immutable event timeline for auditing and postmortem analysis.
 
-## Architecture
+---
+
+## ⚙️ Core Architecture & Flow
 
 ```
                     ┌─────────────────────┐
-                    │   React Dashboard    │  (services / incidents / on-call)
-                    └──────────┬───────────┘
+                    │   React Dashboard   │  (Services / Incidents / On-Call)
+                    └──────────┬──────────┘
                                │ REST
-                    ┌──────────▼───────────┐
-                    │   Node/Express API    │
-                    └──┬────────┬───────┬──┘
+                    ┌──────────▼──────────┐
+                    │   Node/Express API  │
+                    └──┬────────┬───────┬─┘
                        │        │       │
           ┌────────────▼─┐  ┌───▼────┐  ┌─▼──────────────┐
-          │ Health Poller │  │MongoDB │  │ Escalation      │
-          │ (node-cron)   │  │(data)  │  │ Engine          │
-          └───────┬───────┘  └────────┘  └───────┬─────────┘
-                  │                                │
-       pings monitored services          ┌─────────▼─────────┐
-                                          │  Alert Dispatcher  │
-                                          └──┬──────────────┬─┘
-                                             │              │
-                                   ┌─────────▼───┐   ┌──────▼────────────┐
-                                   │ AWS Lambda  │   │ IBM Cloudant       │
-                                   │ + SNS       │   │ (audit log mirror) │
-                                   │ (alert      │   │                    │
-                                   │  fanout)    │   └────────────────────┘
-                                   └─────────────┘
+          │ Health Poller │  │MongoDB │  │ Escalation     │
+          │ (node-cron)   │  │(data)  │  │ Engine         │
+          └───────┬───────┘  └────────┘  └───────┬────────┘
+                  │                              │
+       pings monitored services         ┌────────▼────────┐
+                                        │ Alert Dispatcher│
+                                        └──┬────────────┬─┘
+                                           │            │
+                                  ┌────────▼───┐   ┌────▼──────────────┐
+                                  │ AWS Lambda │   │ IBM Cloudant      │
+                                  │ + SNS      │   │ (audit log mirror)│
+                                  └────────────┘   └───────────────────┘
 
-  Deployment: Docker containers → Kubernetes (Minikube)
-  - 2 backend replicas behind a ClusterIP Service
-  - HorizontalPodAutoscaler scales 2→5 replicas under load
-  - Liveness/readiness probes drive self-healing
+  Deployment Architecture (Kubernetes / Minikube):
+  - Multi-replica Node.js backend behind ClusterIP Service
+  - HorizontalPodAutoscaler (HPA) scaling 2 → 5 replicas under traffic spikes
+  - Liveness & Readiness probes driving automated self-healing
 ```
 
-## Why each technology is used (not just checkbox compliance)
+### Event Lifecycle
 
-| Technology | Why it's actually needed here |
-|---|---|
-| **Docker** | Backend and frontend have different runtimes (Node vs. Nginx-served static build); containerizing each lets them scale and deploy independently. |
-| **Kubernetes** | The whole point of an incident tool is *it can't be the thing that's down*. K8s liveness probes + multiple replicas mean the tool self-heals — directly relevant to its own purpose, not a forced requirement. |
-| **AWS Lambda + SNS** | SNS is built for multi-channel fanout (email + SMS from one publish call) — exactly what alerting needs, instead of hardcoding one notification channel. |
-| **IBM Cloudant** | Append-only incident timeline events are naturally document-shaped. Mirroring them to a separate managed store means the audit trail survives even if the primary DB has an issue — genuine resilience reasoning. |
-| **node-cron** | Deterministic, explainable polling — no external scheduler needed for this scale. |
+1. **Automated Health Polling:** Background worker checks service endpoints on a configurable cron schedule.
+2. **Incident Creation & Alerting:** Upon crossing failure thresholds, an incident is opened and dispatched via AWS Lambda + SNS (Email/SMS fanout).
+3. **Escalation Engine:** Unacknowledged incidents automatically escalate to the next engineer in rotation after a designated SLA window.
+4. **Immutable Audit Trail:** All state transitions (`created` → `acknowledged` → `resolved`) are mirrored asynchronously to IBM Cloudant.
 
-## Project structure
+---
+
+## 🛠 Tech Stack & Engineering Rationale
+
+| Technology | Role | Engineering Rationale |
+|---|---|---|
+| **Docker** | Containerization | Decouples runtime dependencies; builds isolated artifacts for React/Nginx frontend and Express backend. |
+| **Kubernetes** | Orchestration | Ensures high availability for critical infrastructure via liveness/readiness probes, automated pod recreation (self-healing), and HPA. |
+| **Node.js / Express** | API & Workers | Non-blocking I/O handles concurrent health-checks and REST traffic efficiently. |
+| **React / Vite** | Operational Dashboard | Lightweight, real-time UI for viewing service health, acknowledging incidents, and managing rotations. |
+| **AWS Lambda + SNS** | Multi-channel Alerting | Decouples notification logic from core application; SNS fanout enables simultaneous SMS/Email dispatch. |
+| **IBM Cloudant** | Audit Event Mirroring | Provides document-based append-only persistence to guarantee audit history survives primary DB failures. |
+| **MongoDB** | Operational Store | Fast read/write performance for dynamic state management (incidents, service statuses, rotations). |
+
+---
+
+## 📁 Repository Structure
 
 ```
 incidentops/
-├── backend/           # Node/Express API + health poller + escalation engine
+├── backend/           # Express API, health poller, escalation logic & integrations
 │   ├── src/
-│   │   ├── models/         # MonitoredService, Incident, OnCallMember
-│   │   ├── routes/         # REST endpoints (/api/services, /api/incidents, /api/oncall)
-│   │   ├── services/       # onCallService, alertService (email + AWS Lambda/SNS), incidentService
-│   │   ├── jobs/           # healthPoller (node-cron, runs every 30s)
-│   │   └── integrations/   # cloudantAudit.js (IBM Cloudant mirror)
-│   ├── .env.example        # Copy to .env and fill in credentials
+│   │   ├── models/         # MongoDB Schemas (MonitoredService, Incident, OnCallMember)
+│   │   ├── routes/         # REST API endpoints
+│   │   ├── services/       # On-call, alert dispatcher, and incident management services
+│   │   ├── jobs/           # Health polling cron job
+│   │   └── integrations/   # IBM Cloudant audit trail synchronization
 │   └── Dockerfile
-├── frontend/           # React (Vite) dashboard → served by Nginx
+├── frontend/           # React (Vite) operational dashboard
 │   ├── src/
-│   │   ├── components/     # ServicesTab, IncidentsTab, OnCallTab
-│   │   └── api.js          # Axios client for all backend calls
-│   ├── nginx.conf          # Proxies /api/ to backend; SPA routing
+│   │   ├── components/     # UI Views (Services, Incidents, On-Call)
+│   │   └── api.js          # REST client integration
+│   ├── nginx.conf          # Nginx reverse proxy configuration
 │   └── Dockerfile
-├── aws/                # Lambda function (snsAlertLambda.js) + deployment README
-├── k8s/                # Kubernetes manifests (Deployment, Service, HPA, ConfigMap)
-├── docs/               # Presentation notes + K8s demo helper script
-└── docker-compose.yml  # Local dev — spins up mongo + backend + frontend
+├── aws/                # AWS Lambda function (SNS Alert Dispatcher) & IaC setup
+├── k8s/                # Kubernetes manifests (Deployments, Services, HPA, ConfigMaps)
+├── docs/               # Architecture notes & Kubernetes demonstration scripts
+└── docker-compose.yml  # Local multi-container development environment
 ```
 
-## Services
+---
 
-### Dashboard — Services Tab
-> The Services tab shows all monitored endpoints with live status, response times, and consecutive failure counts.
-> Add the seeded "Broken Service (demo)" to watch it go from `healthy` → `degraded` → `down` as the poller detects failures.
+## 🚀 Quickstart — Running Locally with Docker Compose
 
-### Dashboard — Incidents Tab
-> Auto-created incidents appear here when a service crosses its failure threshold.
-> Each incident shows: severity badge, assigned on-call member, escalation level, and full timeline.
+### Prerequisites
+- Docker & Docker Compose installed
 
-### Dashboard — On-Call Tab
-> Shows the full rotation order. The currently on-call member is highlighted.
-> Rotation is deterministic: `epochWeek % activeMembers` — no manual schedule needed.
+### 1. Clone & Configure
+```bash
+git clone https://github.com/shubhitamishra/IncidentOps.git
+cd IncidentOps
+cp backend/.env.example backend/.env
+```
 
-**Dashboard:** http://localhost:8080  
-**API:** http://localhost:5000  
-**API health:** http://localhost:5000/health
+### 2. Launch the Stack
+```bash
+docker compose up --build -d
+```
 
-The seeded "Broken Service (demo — always 503)" will auto-create an incident after
-approximately 90 seconds (3 consecutive 30-second check failures).
+### 3. Seed Initial Demo Data
+```bash
+docker exec -it incidentops-backend node src/seed.js
+```
 
-## API Endpoints
+### Access Points:
+- **Operational Dashboard:** `http://localhost:8080`
+- **Backend API:** `http://localhost:5000`
+- **Health Check Endpoint:** `http://localhost:5000/health`
+
+*Note: The seeded "Broken Service" will simulate health check failures and trigger an incident within ~90 seconds.*
+
+---
+
+## ☸️ Kubernetes Deployment & Resilience Features
+
+### Deployment Manifests
+Apply the cluster configuration in `k8s/`:
+```bash
+minikube start
+eval $(minikube docker-env)
+
+docker build -t incidentops-backend:latest ./backend
+docker build -t incidentops-frontend:latest ./frontend
+
+kubectl apply -f k8s/config.yaml
+kubectl apply -f k8s/mongo-deployment.yaml
+kubectl apply -f k8s/backend-deployment.yaml
+kubectl apply -f k8s/frontend-deployment.yaml
+kubectl apply -f k8s/hpa.yaml
+```
+
+### Self-Healing Demonstration
+Test Kubernetes controller recovery by terminating an active pod:
+```bash
+# Delete a backend replica
+kubectl delete pod -l app=incidentops-backend
+
+# Watch the ReplicaSet controller spawn a replacement pod in < 5 seconds
+kubectl get pods -w
+```
+
+### Horizontal Pod Autoscaling (HPA)
+```bash
+# Monitor HPA status
+kubectl get hpa
+
+# Generate synthetic CPU load to trigger autoscaling (2 → 5 replicas)
+hey -z 60s -c 50 $(minikube service incidentops-backend --url)/health
+```
+
+---
+
+## 📡 REST API Documentation
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Server health check (used by K8s liveness probe) |
-| `GET` | `/api/services` | List all monitored services |
-| `POST` | `/api/services` | Add a monitored service |
+| `GET` | `/health` | Server health check endpoint (used by K8s probes) |
+| `GET` | `/api/services` | Retrieve list of monitored services and status |
+| `POST` | `/api/services` | Register a new endpoint for health monitoring |
 | `DELETE` | `/api/services/:id` | Remove a monitored service |
-| `GET` | `/api/incidents` | List incidents (optional `?status=open\|acknowledged\|resolved`) |
-| `GET` | `/api/incidents/:id` | Get a single incident with full timeline |
-| `POST` | `/api/incidents/:id/acknowledge` | Acknowledge an incident `{ actor: "name" }` |
-| `POST` | `/api/incidents/:id/resolve` | Resolve an incident `{ actor: "name", note: "..." }` |
-| `GET` | `/api/oncall` | List all on-call members |
-| `GET` | `/api/oncall/current` | Get the current on-call member |
-| `POST` | `/api/oncall` | Add a member to the rotation |
+| `GET` | `/api/incidents` | List incidents (filter by `status=open\|acknowledged\|resolved`) |
+| `GET` | `/api/incidents/:id` | Get detailed incident report with complete audit timeline |
+| `POST` | `/api/incidents/:id/acknowledge` | Acknowledge incident ownership `{ actor: "Name" }` |
+| `POST` | `/api/incidents/:id/resolve` | Resolve incident `{ actor: "Name", note: "Resolution details" }` |
+| `GET` | `/api/oncall/current` | Get current active on-call engineer |
+| `POST` | `/api/oncall` | Add an engineer to the rotation list |
 
+---
 
-### Self-healing demo (delete a pod, watch K8s recreate it)
+## 🌩️ Cloud Integrations
 
-```bash
-kubectl get pods                          # note a backend pod name
-kubectl delete pod <backend-pod-name>     # delete one replica
-kubectl get pods -w                       # watch it recreate within ~5 seconds
-```
+### AWS Lambda + SNS Alert Fanout
+1. Provisions AWS SNS topic (`incidentops-alerts`) with Email/SMS subscribers.
+2. Lambda function [`aws/snsAlertLambda.js`](aws/snsAlertLambda.js) formats payload and triggers SNS publish.
+3. Configured via `AWS_LAMBDA_ALERT_URL` in `backend/.env`.
 
-The dashboard stays reachable throughout because the second replica handles traffic.
+### IBM Cloudant Audit Trail
+- Asynchronously mirrors incident creation, acknowledgment, and resolution timeline events to IBM Cloudant (`incident_audit_log` database).
+- Fails safe if credentials are not configured, maintaining operational capability in standalone mode.
 
-### HPA demo
+---
 
-```bash
-kubectl get hpa                           # shows current CPU utilization and replica count
+## 💡 Architecture Decisions & Design Trade-offs
 
-# Generate load (replicas will scale 2→5 when CPU exceeds 60%)
-hey -z 60s -c 50 $(minikube service incidentops-backend --url)/health
+- **SNS Alert Fanout vs Direct SMTP:** SNS decouples notification channels from backend business logic. Adding future channels (e.g. Slack/PagerDuty webhooks) requires adding SNS subscribers without altering core application code.
+- **Dual Persistence (MongoDB + Cloudant):** MongoDB serves as the operational transactional database for rapid state updates. Cloudant acts as an append-only log store to ensure audit history integrity even during operational database maintenance or downtime.
+- **Deterministic On-Call Rotation:** Computes active engineer based on epoch week indices (`epochWeek % activeMemberCount`), eliminating the need for complex stateful scheduling algorithms or external dependencies.
+- **In-Memory Escalation Timers:** Uses NodeJS timers for lightweight escalation handling. *(In large-scale enterprise deployments, this would be backed by a distributed delay queue like AWS SQS or Redis Celery to handle node crashes during escalation windows).*
 
-kubectl get pods -w                       # watch new replicas appear
-```
+---
 
-Or use the included helper script:
+## 🗺️ Roadmap & Future Enhancements
 
-```bash
-bash docs/k8s-demo.sh status     # show current state
-bash docs/k8s-demo.sh selfheal   # automated self-healing demo
-bash docs/k8s-demo.sh hpa        # HPA instructions + load commands
-```
+- [ ] Slack & Microsoft Teams Webhook Integrations via SNS.
+- [ ] Incident Deduplication Engine (collapsing repetitive health check failures into single incident streams).
+- [ ] Distributed Queue (AWS SQS) backing for escalation SLA timers.
+- [ ] Automated SLA & Uptime percentage reporting metrics per service.
 
-## AWS Lambda + SNS Integration
+---
 
-See [`aws/README.md`](aws/README.md) for full setup. Summary:
+## 📜 License
 
-1. Create an SNS topic: `aws sns create-topic --name incidentops-alerts`
-2. Subscribe your email: `aws sns subscribe --topic-arn <arn> --protocol email --notification-endpoint you@example.com`
-3. Deploy `aws/snsAlertLambda.js` as a Lambda function (Node 20.x)
-4. Attach an API Gateway HTTP trigger to the Lambda
-5. Set `AWS_LAMBDA_ALERT_URL=<api-gateway-url>` in `backend/.env`
-
-When an incident fires, the backend now dispatches alerts through two parallel channels:
-- **Email** (via SMTP/nodemailer, if configured)
-- **AWS SNS fanout** (via Lambda, if `AWS_LAMBDA_ALERT_URL` is set)
-
-Backend logs will show:
-```
-[ALERT] -> oncall@example.com | 🚨 Incident: Service is down
-[ALERT] email: delivered ✓
-[ALERT] awsSns: delivered ✓
-```
-
-## IBM Cloudant Integration
-
-Set in `backend/.env`:
-```
-IBM_CLOUDANT_URL=https://<instance>.cloudantnosqldb.appdomain.cloud
-IBM_CLOUDANT_APIKEY=<your-api-key>
-```
-
-The backend automatically creates the `incident_audit_log` database and mirrors
-every timeline event (created / acknowledged / resolved) to it. If credentials
-are not set, the integration no-ops safely — the app works fine in demo mode.
-
-
-## Future scope (mention in presentation to show industry thinking)
-
-- Slack/Teams webhook integration via the same SNS topic
-- Incident severity auto-classification based on service tags
-- Uptime SLA reporting per service
-- Replace in-memory escalation timers with a durable queue (SQS)
-- Deduplication: prevent multiple open incidents for the same service
-
-## License
-
-MIT
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
