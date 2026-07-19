@@ -1,12 +1,15 @@
 # IncidentOps
 
 [![CI — Build & Smoke Test](https://github.com/shubhitamishra/IncidentOps/actions/workflows/ci.yml/badge.svg)](https://github.com/shubhitamishra/IncidentOps/actions/workflows/ci.yml)
+[![Vercel Live Demo](https://img.shields.io/badge/Vercel-Live%20Demo-000000?logo=vercel&logoColor=white)](https://incident-ops-one.vercel.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-HPA%20%2B%20self--healing-326CE5?logo=kubernetes&logoColor=white)](k8s/)
 [![Node](https://img.shields.io/badge/Node.js-20-339933?logo=node.js&logoColor=white)](backend/package.json)
 
 A cloud-native Incident Management and On-Call Alerting Platform designed for high-availability production environments. IncidentOps automates service health monitoring, multi-channel alerting (AWS SNS), automated incident escalation, and immutable audit logging (IBM Cloudant), while demonstrating enterprise-grade Kubernetes orchestration (self-healing, HPA, and liveness probes).
+
+> 🌐 **Live Demo:** Explore the operational dashboard in frontend demo mode at [incident-ops-one.vercel.app](https://incident-ops-one.vercel.app).
 
 ---
 
