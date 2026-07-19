@@ -98,7 +98,7 @@ incidentops/
 └── docker-compose.yml  # Local dev — spins up mongo + backend + frontend
 ```
 
-## Screenshots
+## Services
 
 ### Dashboard — Services Tab
 > The Services tab shows all monitored endpoints with live status, response times, and consecutive failure counts.
@@ -111,21 +111,6 @@ incidentops/
 ### Dashboard — On-Call Tab
 > Shows the full rotation order. The currently on-call member is highlighted.
 > Rotation is deterministic: `epochWeek % activeMembers` — no manual schedule needed.
-
-*(Screenshots: run the stack, navigate to http://localhost:8080, and capture each tab for your presentation slides.)*
-
-## Running locally
-
-```bash
-# 1. Copy env template and fill in what you have (safe to leave blank for demo mode)
-cp backend/.env.example backend/.env
-
-# 2. Start everything (MongoDB healthcheck ensures Mongo is ready before backend starts)
-docker compose up --build
-
-# 3. Seed demo data (on-call rotation + 3 monitored services including a failing one)
-docker exec -it incidentops-backend node src/seed.js
-```
 
 **Dashboard:** http://localhost:8080  
 **API:** http://localhost:5000  
@@ -150,29 +135,6 @@ approximately 90 seconds (3 consecutive 30-second check failures).
 | `GET` | `/api/oncall/current` | Get the current on-call member |
 | `POST` | `/api/oncall` | Add a member to the rotation |
 
-## Deploying to Kubernetes (Minikube)
-
-```bash
-# 1. Start Minikube
-minikube start
-
-# 2. Point Docker at Minikube's internal registry
-eval $(minikube docker-env)
-
-# 3. Build images directly into Minikube's registry
-docker build -t incidentops-backend:latest ./backend
-docker build -t incidentops-frontend:latest ./frontend
-
-# 4. Apply all manifests
-kubectl apply -f k8s/config.yaml
-kubectl apply -f k8s/mongo-deployment.yaml
-kubectl apply -f k8s/backend-deployment.yaml
-kubectl apply -f k8s/frontend-deployment.yaml
-kubectl apply -f k8s/hpa.yaml
-
-# 5. Open the frontend
-minikube service incidentops-frontend
-```
 
 ### Self-healing demo (delete a pod, watch K8s recreate it)
 
@@ -248,30 +210,6 @@ Quick sequence:
 5. Show `kubectl get hpa`; explain autoscaling
 6. Close with the audit trail timeline
 
-## Anticipated Q&A — answers you should know cold
-
-- **"Why not just use email/SMS directly instead of SNS?"** — SNS
-  decouples the backend from delivery channels. Adding Slack or a new
-  channel later means adding an SNS subscription, not changing backend
-  code.
-- **"Why Cloudant and not just MongoDB for everything?"** — Separation of
-  concerns: MongoDB is the operational store (things change: status,
-  assignment), Cloudant holds an immutable audit trail. If MongoDB has
-  an issue, the incident *history* is still safe elsewhere.
-- **"How does escalation actually work?"** — `setTimeout`-based check
-  after `ESCALATION_TIMEOUT_MINUTES`; if the incident is still `open`
-  (not acknowledged), it reassigns to the next person in
-  `rotationOrder` and re-alerts. In production this would be a durable
-  job queue (e.g. AWS SQS + delay queues) instead of an in-memory timer,
-  since a server restart would lose pending timers — worth mentioning
-  proactively as a known limitation.
-- **"How does the on-call rotation get computed?"** — deterministic
-  weekly rotation: `epochWeek % activeMemberCount`. No manual schedule
-  entry needed, no single point of failure in "who's on call."
-- **"What happens if two incidents fire for the same service at once?"**
-  — Currently each failed health-check-threshold event creates a new
-  incident; a real system would dedupe by open incidents per service.
-  Good to flag as a "next iteration" if asked — shows awareness.
 
 ## Future scope (mention in presentation to show industry thinking)
 
