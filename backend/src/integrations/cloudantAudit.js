@@ -1,34 +1,47 @@
 /**
- * IBM Cloudant integration — mirrors every incident timeline event to a
- * separate audit-log database.
+ * IBM Cloudant / CouchDB integration — mirrors every incident timeline event
+ * to a separate audit-log database.
  *
- * Why Cloudant here specifically: incident timelines (created →
- * acknowledged → resolved) are exactly the kind of append-only,
- * document-shaped event log Cloudant/CouchDB is designed for, and
- * keeping the audit trail in a separate managed store means it survives
- * even if the primary MongoDB instance has an issue — a genuine
- * resilience argument, not just "using IBM because it's required."
+ * Why Cloudant/CouchDB here: incident timelines are append-only, document-
+ * shaped events — exactly what CouchDB was designed for. Keeping the audit
+ * trail in a separate managed store means it survives even if MongoDB has
+ * an issue — a genuine resilience argument.
  *
- * If IBM_CLOUDANT_URL / IBM_CLOUDANT_APIKEY are not set, this module
- * no-ops safely so local development and demos never break.
+ * Auth modes (auto-detected):
+ *   - CouchDB basic auth: set IBM_CLOUDANT_URL + IBM_CLOUDANT_USER + IBM_CLOUDANT_PASSWORD
+ *     (used in local demo / docker-compose with the CouchDB container)
+ *   - IBM Cloudant IAM:   set IBM_CLOUDANT_URL + IBM_CLOUDANT_APIKEY
+ *     (used in production against a real IBM Cloudant instance)
+ *
+ * If none of the above are set, this module no-ops safely so local
+ * development and demos never break.
  */
 
 const axios = require('axios');
 
-const CLOUDANT_URL = process.env.IBM_CLOUDANT_URL;
-const CLOUDANT_APIKEY = process.env.IBM_CLOUDANT_APIKEY;
+const CLOUDANT_URL      = process.env.IBM_CLOUDANT_URL;
+const CLOUDANT_APIKEY   = process.env.IBM_CLOUDANT_APIKEY;
+const CLOUDANT_USER     = process.env.IBM_CLOUDANT_USER;
+const CLOUDANT_PASSWORD = process.env.IBM_CLOUDANT_PASSWORD;
 const DB_NAME = 'incident_audit_log';
 
-const enabled = !!(CLOUDANT_URL && CLOUDANT_APIKEY);
+const useBasicAuth = !!(CLOUDANT_URL && CLOUDANT_USER && CLOUDANT_PASSWORD);
+const useIamAuth   = !!(CLOUDANT_URL && CLOUDANT_APIKEY);
+const enabled      = useBasicAuth || useIamAuth;
 
-// Cache the IAM token so we don't re-fetch on every event
+// IAM token cache (only used in Cloudant mode)
 let _cachedToken = null;
 let _tokenExpiry = 0;
 
-async function getIamToken() {
-  // Re-use cached token if still valid (IAM tokens last ~1 hour)
-  if (_cachedToken && Date.now() < _tokenExpiry) return _cachedToken;
+async function getAuthHeader() {
+  if (useBasicAuth) {
+    // CouchDB basic auth — works locally and on any self-hosted CouchDB
+    const encoded = Buffer.from(`${CLOUDANT_USER}:${CLOUDANT_PASSWORD}`).toString('base64');
+    return `Basic ${encoded}`;
+  }
 
+  // IBM Cloudant IAM token (re-use if still valid)
+  if (_cachedToken && Date.now() < _tokenExpiry) return `Bearer ${_cachedToken}`;
   const res = await axios.post(
     'https://iam.cloud.ibm.com/identity/token',
     new URLSearchParams({
@@ -38,27 +51,22 @@ async function getIamToken() {
     { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
   );
   _cachedToken = res.data.access_token;
-  // Expire 5 minutes before actual expiry to avoid edge cases
   _tokenExpiry = Date.now() + (res.data.expires_in - 300) * 1000;
-  return _cachedToken;
+  return `Bearer ${_cachedToken}`;
 }
 
-/**
- * Ensures the audit log database exists in Cloudant.
- * CouchDB/Cloudant returns 201 on create, 412 if already exists — both fine.
- */
+// Ensure the audit DB exists (CouchDB returns 412 if already present — fine)
 let _dbReady = false;
-async function ensureDb(token) {
+async function ensureDb(authHeader) {
   if (_dbReady) return;
   try {
     await axios.put(
       `${CLOUDANT_URL}/${DB_NAME}`,
       {},
-      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      { headers: { Authorization: authHeader, 'Content-Type': 'application/json' } }
     );
     console.log(`[CLOUDANT] Database '${DB_NAME}' created.`);
   } catch (err) {
-    // 412 = already exists — that's fine
     if (err.response?.status === 412) {
       console.log(`[CLOUDANT] Database '${DB_NAME}' already exists.`);
     } else {
@@ -75,8 +83,8 @@ async function mirrorEvent(incidentId, event) {
   }
 
   try {
-    const token = await getIamToken();
-    await ensureDb(token);
+    const auth = await getAuthHeader();
+    await ensureDb(auth);
 
     const res = await axios.post(
       `${CLOUDANT_URL}/${DB_NAME}`,
@@ -85,9 +93,10 @@ async function mirrorEvent(incidentId, event) {
         ...event,
         mirroredAt: new Date().toISOString()
       },
-      { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
+      { headers: { Authorization: auth, 'Content-Type': 'application/json' } }
     );
-    console.log(`[CLOUDANT] Event mirrored — doc id: ${res.data.id}`);
+    const mode = useBasicAuth ? 'CouchDB (local Cloudant-compatible)' : 'IBM Cloudant';
+    console.log(`[CLOUDANT] Event mirrored via ${mode} — doc id: ${res.data.id}`);
   } catch (err) {
     console.error('[CLOUDANT] Failed to mirror event:', err.message);
   }

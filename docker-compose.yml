@@ -1,3 +1,7 @@
+# IBM Cloudant demo: CouchDB is the open-source database that IBM Cloudant
+# is built on. They share an identical HTTP API, so this local container
+# demonstrates the same integration that would run against a real Cloudant
+# instance — the only difference is the URL/auth.
 services:
   mongo:
     image: mongo:7
@@ -15,6 +19,24 @@ services:
       retries: 5
       start_period: 10s
 
+  # CouchDB = Cloudant-compatible local instance (no IBM account needed)
+  couchdb:
+    image: couchdb:3
+    container_name: incidentops-couchdb
+    ports:
+      - "5984:5984"
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=incidentops
+    volumes:
+      - couchdb-data:/opt/couchdb/data
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://admin:incidentops@localhost:5984/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   backend:
     build: ./backend
     container_name: incidentops-backend
@@ -24,6 +46,10 @@ services:
       - MONGO_URI=mongodb://mongo:27017/incidentops
       - PORT=5000
       - ESCALATION_TIMEOUT_MINUTES=5
+      # CouchDB wired as local Cloudant substitute — same HTTP API
+      - IBM_CLOUDANT_URL=http://incidentops-couchdb:5984
+      - IBM_CLOUDANT_USER=admin
+      - IBM_CLOUDANT_PASSWORD=incidentops
     # Load optional AWS/IBM keys from backend/.env without committing them.
     # The file is safe to be absent — docker compose ignores a missing env_file
     # gracefully when required: false is set.
@@ -32,6 +58,8 @@ services:
         required: false
     depends_on:
       mongo:
+        condition: service_healthy
+      couchdb:
         condition: service_healthy
 
   frontend:
@@ -44,3 +72,4 @@ services:
 
 volumes:
   mongo-data:
+  couchdb-data:
