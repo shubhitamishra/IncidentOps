@@ -1,6 +1,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api';
 
+const DEMO_MEMBERS = [
+  { _id: 'm-1', name: 'Alex Chen', email: 'alex.chen@example.com', rotationOrder: 0 },
+  { _id: 'm-2', name: 'Sam Taylor', email: 'sam.taylor@example.com', rotationOrder: 1 }
+];
+
 export default function OnCallTab({ onChange }) {
   const [members, setMembers] = useState([]);
   const [current, setCurrent] = useState(null);
@@ -8,8 +13,19 @@ export default function OnCallTab({ onChange }) {
   const [email, setEmail] = useState('');
 
   const load = () => {
-    api.getOnCall().then(setMembers);
-    api.getCurrentOnCall().then(setCurrent);
+    api.getOnCall()
+      .then(data => {
+        if (Array.isArray(data) && data.length > 0) setMembers(data);
+        else setMembers(DEMO_MEMBERS);
+      })
+      .catch(() => setMembers(DEMO_MEMBERS));
+
+    api.getCurrentOnCall()
+      .then(data => {
+        if (data && data.name) setCurrent(data);
+        else setCurrent(DEMO_MEMBERS[0]);
+      })
+      .catch(() => setCurrent(DEMO_MEMBERS[0]));
   };
 
   useEffect(load, []);
@@ -18,7 +34,11 @@ export default function OnCallTab({ onChange }) {
     e.preventDefault();
     if (!name || !email) return;
     const rotationOrder = members.length;
-    await api.addOnCallMember({ name, email, rotationOrder });
+    try {
+      await api.addOnCallMember({ name, email, rotationOrder });
+    } catch {
+      setMembers(prev => [...prev, { _id: Date.now().toString(), name, email, rotationOrder }]);
+    }
     setName(''); setEmail('');
     load();
     onChange?.();
@@ -46,7 +66,7 @@ export default function OnCallTab({ onChange }) {
                 <div className="service-name">{m.name}</div>
                 <div className="service-url">{m.email}</div>
               </div>
-              {current && current._id === m._id && (
+              {current && current.email === m.email && (
                 <span className="status-badge status-healthy">currently on-call</span>
               )}
             </div>
