@@ -36,11 +36,11 @@ export default function OnCallTab({ onChange }) {
     const rotationOrder = members.length;
     try {
       await api.addOnCallMember({ name, email, rotationOrder });
+      load();
     } catch {
       setMembers(prev => [...prev, { _id: Date.now().toString(), name, email, rotationOrder }]);
     }
     setName(''); setEmail('');
-    load();
     onChange?.();
   };
 

@@ -54,6 +54,7 @@ export default function IncidentsTab() {
   const handleAck = async (id) => {
     try {
       await api.acknowledgeIncident(id, actor);
+      load();
     } catch {
       setIncidents(prev => prev.map(inc => inc._id === id ? {
         ...inc,
@@ -61,12 +62,12 @@ export default function IncidentsTab() {
         timeline: [...inc.timeline, { timestamp: new Date().toISOString(), type: 'acknowledged', message: `Incident acknowledged by ${actor}` }]
       } : inc));
     }
-    load();
   };
 
   const handleResolve = async (id) => {
     try {
       await api.resolveIncident(id, actor, 'Manually resolved from dashboard');
+      load();
     } catch {
       setIncidents(prev => prev.map(inc => inc._id === id ? {
         ...inc,
@@ -74,7 +75,6 @@ export default function IncidentsTab() {
         timeline: [...inc.timeline, { timestamp: new Date().toISOString(), type: 'resolved', message: `Incident resolved by ${actor}` }]
       } : inc));
     }
-    load();
   };
 
   return (

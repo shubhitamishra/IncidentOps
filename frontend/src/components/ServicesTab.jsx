@@ -44,16 +44,17 @@ export default function ServicesTab() {
     if (!name || !url) return;
     try {
       await api.addService({ name, url });
+      load();
     } catch {
       setServices(prev => [...prev, { _id: Date.now().toString(), name, url, status: 'healthy', consecutiveFailures: 0, failureThreshold: 3, lastResponseTimeMs: 35 }]);
     }
     setName(''); setUrl('');
-    load();
   };
 
   const handleDelete = async (id) => {
     try {
       await api.deleteService(id);
+      load();
     } catch {
       setServices(prev => prev.filter(s => s._id !== id));
     }
